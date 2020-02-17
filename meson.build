@@ -1,4 +1,5 @@
 project('hse-workshop', 'cpp', default_options: ['cpp_std=c++17'])
 
-add_project_arguments(['-DLOCAL_RUN'], language: 'cpp')
-executable('main', 'main.cpp')
+sources = ['src/main.cpp']
+includes = include_directories('include')
+executable('main', sources, include_directories: includes)
