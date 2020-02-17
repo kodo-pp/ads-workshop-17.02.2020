@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.0.0)
+cmake_minimum_required(VERSION 2.4)
 project(gaussian-elimination)
 include_directories(include)
 add_executable(main src/main.cpp)

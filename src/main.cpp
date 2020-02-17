@@ -45,9 +45,19 @@ void printLatex(std::ostream& out, const T& x)
 
 
 template <typename T>
-void printLatex(std::ostream& out, const Matrix<T>& matrix)
+void printLatex(std::ostream& out, const Matrix<T>& matrix, std::optional<size_t> cutLeft = 0)
 {
-    out << "\\begin{bmatrix}\n";
+    out << "$\\left[\\begin{array}{";
+    for (size_t col = 0; col < matrix.cols(); ++col)
+    {
+        if (cutLeft.has_value() && col == *cutLeft)
+        {
+            out << '|';
+        }
+        out << 'c';
+    }
+    out << "}\n";
+
     for (size_t row = 0; row < matrix.rows(); ++row)
     {
         out << "    ";
@@ -58,7 +68,7 @@ void printLatex(std::ostream& out, const Matrix<T>& matrix)
         }
         out << "\\\\\n";
     }
-    out << "\\end{bmatrix}\n";
+    out << "\\end{array}\\right]$\n";
 }
 
 
@@ -74,10 +84,10 @@ void printSolution(std::ostream& out, const typename Matrix<T>::MaybeSolution& s
     size_t n = sol->size();
     std::set<std::string> vars;
 
-    out << "\\begin{cases}\n";
+    out << "$\\begin{cases}\n";
     for (size_t i = 0; i < n; ++i)
     {
-        out << "x_{" << std::to_string(i) << "} = ";
+        out << "    x_{" << std::to_string(i) << "} = ";
         bool first = true;
         for (const typename Matrix<T>::Atom& atom : (*sol)[i])
         {
@@ -101,7 +111,7 @@ void printSolution(std::ostream& out, const typename Matrix<T>::MaybeSolution& s
         }
         out << "\\\\\n";
     }
-    out << "\\end{cases}\\quad\n";
+    out << "\\end{cases}\\quad";
     for (const std::string& var : vars)
     {
         out << ", " << var;
@@ -111,6 +121,7 @@ void printSolution(std::ostream& out, const typename Matrix<T>::MaybeSolution& s
     {
         out << " \\in \\mathbb{R}";
     }
+    out << "$\n";
 }
 
 
@@ -120,12 +131,15 @@ int main()
     std::cin >> numEquations >> numVars >> numSystems;
     Matrix<double> matrix(numEquations, numVars + numSystems);
     std::cin >> matrix;
+    std::cout << "Systems of linear equations:" << std::endl;
+    printLatex(std::cout, matrix, numVars);
 
+    std::cout << "\n\nTheir solutions (respectively):\n\n";
     using MaybeSolution = typename decltype(matrix)::MaybeSolution;
     std::vector<MaybeSolution> sols = matrix.solveSle(numSystems);
     for (const MaybeSolution& sol : sols)
     {
         printSolution<double>(std::cout, sol);
-        std::cout << "\\\\\n";
+        std::cout << "\n";
     }
 }
