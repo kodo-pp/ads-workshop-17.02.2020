@@ -2,9 +2,14 @@
 #define MATRIX_MATRIX_HPP_INCLUDED
 
 
+#include <cmath>
 #include <optional>
-#include <vector>
+#include <stdexcept>
 #include <type_traits>
+#include <iostream>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
 
 namespace matrix
@@ -26,7 +31,7 @@ struct ScalarTraits<float>
 {
     static bool isZero(float x) noexcept
     {
-        return abs(x) < 1e-7;
+        return std::abs(x) < 1e-7;
     }
 };
 
@@ -36,7 +41,7 @@ struct ScalarTraits<double>
 {
     static bool isZero(double x) noexcept
     {
-        return abs(x) < 1e-8;
+        return std::abs(x) < 1e-7;
     }
 };
 
@@ -46,15 +51,28 @@ struct ScalarTraits<long double>
 {
     static bool isZero(long double x) noexcept
     {
-        return abs(x) < 1e-9;
+        return std::abs(x) < 1e-7;
     }
 };
+
+
+std::string makeVar(size_t index)
+{
+    return "y_{" + std::to_string(index) + "}";
+}
 
 
 template <typename T>
 class Matrix
 {
 public:
+    using Literal = std::variant<std::string, T>;
+    using Atom = std::pair<Literal, T>;
+    using Linear = std::vector<Atom>;
+    using Solution = std::vector<Linear>;
+    using MaybeSolution = std::optional<Solution>;
+
+
     /// Constructor. Creates a matrix of size numRows × numCols and fills it with the given value
     Matrix(size_t numRows, size_t numCols, const T& fill = T{}):
         _numRows(numRows),
@@ -175,7 +193,114 @@ public:
     }
 
 
-private:
+    /// Concatenate two matrices (horizontally)
+    Matrix<T> concatenatedWith(const Matrix<T>& other) const
+    {
+        if (rows() != other.rows())
+        {
+            throw std::logic_error("Mismatched matrix sizes");
+        }
+
+        Matrix<T> result(rows(), cols() + other.cols());
+        for (size_t row = 0; row < rows(); ++row)
+        {
+            for (size_t col = 0; col < cols(); ++col)
+            {
+                result.at(row, col) = at(row, col);
+            }
+
+            for (size_t col = 0; col < other.cols(); ++col)
+            {
+                result.at(row, cols() + col) = other.at(row, col);
+            }
+        }
+        return result;
+    }
+
+
+    /// Solve multiple systems of linear equations
+    std::vector<MaybeSolution> solveSle(size_t numSystems)
+    {
+        Matrix<T> sle = *this;
+        sle.toRref();
+        std::vector<std::optional<Solution>> sols;
+        for (size_t sys = 0; sys < numSystems; ++sys)
+        {
+            sols.push_back(([&]() -> MaybeSolution {
+                if (!sle.isConsistent(numSystems, sys))
+                {
+                    return std::nullopt;
+                }
+
+                // row -> col
+                std::unordered_map<size_t, size_t> leadingIndices;
+                for (size_t row = 0; row < rows(); ++row)
+                {
+                    std::optional<size_t> leadingIndex = sle.findLeadingElement(row);
+                    if (leadingIndex.has_value())
+                    {
+                        leadingIndices.emplace(*leadingIndex, row);
+                    }
+                }
+
+                Solution sol;
+                for (size_t col = 0; col < cols() - numSystems; ++col)
+                {
+                    if (leadingIndices.count(col) == 0)
+                    {
+                        sol.push_back(Linear{{makeVar(col), 1}});
+                    }
+                    else
+                    {
+                        sol.push_back(Linear());
+                        sol.back().emplace_back(
+                            sle.at(leadingIndices.at(col), sle.cols() - numSystems + sys),
+                            1
+                        );
+                        for (size_t freeCol = col + 1; freeCol < cols() - numSystems; ++freeCol)
+                        {
+                            const T& element = sle.at(leadingIndices.at(col), freeCol);
+                            if (_isZero(element))
+                            {
+                                continue;
+                            }
+                            sol.back().emplace_back(
+                                makeVar(freeCol),
+                                -element
+                            );
+                        }
+                    }
+                }
+                return sol;
+            })());
+        }
+        return sols;
+    }
+
+
+    bool isConsistent(size_t numSystems, size_t sys) const noexcept
+    {
+        for (size_t row = 0; row < rows(); ++row)
+        {
+            bool isZeroRow = true;
+            for (size_t col = 0; col < cols() - numSystems; ++col)
+            {
+                if (!_isZero(at(row, col)))
+                {
+                    isZeroRow = false;
+                    break;
+                }
+            }
+
+            if (isZeroRow && !_isZero(at(row, cols() - numSystems + sys)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
     std::optional<size_t> findPivotElement(size_t col, size_t startRow = 0) const noexcept
     {
         for (size_t row = startRow; row < rows(); ++row)
@@ -194,7 +319,7 @@ private:
     {
         for (size_t col = startCol; col < cols(); ++col)
         {
-            if (at(row, col) != 0)
+            if (!_isZero(at(row, col)))
             {
                 return {col};
             }
@@ -202,6 +327,8 @@ private:
 
         return std::nullopt;
     }
+
+private:
 
 
     void makeZerosAbove(size_t row, size_t col) noexcept
