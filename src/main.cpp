@@ -98,7 +98,7 @@ void printSolution(std::ostream& out, const typename Matrix<T>::MaybeSolution& s
             first = false;
             auto [literal, coefficient] = atom;
             if (std::abs(coefficient - 1) > 1e-7) {
-                out << coefficient << " \\cdot ";
+                out << coefficient << " ";
             }
             std::visit([&out, &vars](const auto& x) {
                 using ActualType = std::decay_t<decltype(x)>;
